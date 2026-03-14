@@ -40,28 +40,29 @@ import { DOGS } from './data/dogs';
 import { PUPPIES } from './data/puppies';
 import { Dog } from './types';
 
-const BRAND_BUDDY = "https://images.pexels.com/photos/36568309/pexels-photo-36568309.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2";
+import ShelterMap from './components/ShelterMap';
+
+const BRAND_BUDDY = "https://images.pexels.com/photos/36568690/pexels-photo-36568690.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2";
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'discover' | 'puppies'>('discover');
+  const [activeTab, setActiveTab] = useState<'discover' | 'puppies' | 'shelters'>('discover');
   const [showDonationModal, setShowDonationModal] = useState<Dog | null>(null);
   const [showSuccessScreen, setShowSuccessScreen] = useState<{ amount: number; dogName: string; certId: string } | null>(null);
   const [displayPuppies, setDisplayPuppies] = useState<Dog[]>(PUPPIES);
   const [viewingCert, setViewingCert] = useState<{ id: string; name: string; amount: number; dogName: string } | null>(null);
   const [totalDonated, setTotalDonated] = useState(0);
-  const [myPets, setMyPets] = useState<{name: string, breed: string, age: string}[]>([
-    { name: "Buddy", breed: "Golden Retriever", age: "3 years" }
+  const [myPets, setMyPets] = useState<{name: string, age: string}[]>([
+    { name: "Buddy", age: "3 years" }
   ]);
   const [showProfile, setShowProfile] = useState(false);
-  const [newPet, setNewPet] = useState({ name: "", breed: "", age: "" });
+  const [newPet, setNewPet] = useState({ name: "", age: "" });
   const [isEditingProfile, setIsEditingProfile] = useState(false);
   const [profileData, setProfileData] = useState({
     bio: "Chicago local & dog lover. Passionate about helping rescue pups find their forever homes!",
     neighborhood: "Wicker Park",
-    favoriteBreed: "Golden Retriever",
     linkedin: "https://linkedin.com",
     twitter: "https://twitter.com",
     instagram: "https://instagram.com",
@@ -245,7 +246,7 @@ export default function App() {
           <div className="hidden md:flex items-center gap-8">
             <NavLink onClick={() => setActiveTab('discover')} active={activeTab === 'discover'}>DISCOVER</NavLink>
             <NavLink onClick={() => setActiveTab('puppies')} active={activeTab === 'puppies'}>PUPPIES</NavLink>
-            <NavLink onClick={() => {}}>SHELTERS</NavLink>
+            <NavLink onClick={() => setActiveTab('shelters')} active={activeTab === 'shelters'}>SHELTERS</NavLink>
           </div>
 
           <div className="flex items-center gap-4">
@@ -289,6 +290,7 @@ export default function App() {
           >
             <NavLink onClick={() => { setActiveTab('discover'); setIsMenuOpen(false); }}>DISCOVER</NavLink>
             <NavLink onClick={() => { setActiveTab('puppies'); setIsMenuOpen(false); }}>PUPPIES</NavLink>
+            <NavLink onClick={() => { setActiveTab('shelters'); setIsMenuOpen(false); }}>SHELTERS</NavLink>
             {user ? (
               <button onClick={logout} className="font-bangers text-3xl">LOGOUT</button>
             ) : (
@@ -302,6 +304,14 @@ export default function App() {
         <>
           {/* Hero Section */}
           <section className="relative min-h-screen flex flex-col items-center justify-center pt-20 overflow-hidden">
+            <div className="absolute inset-0 z-0">
+              <img 
+                src={BRAND_BUDDY} 
+                alt="Hero Background" 
+                className="w-full h-full object-cover opacity-10 grayscale"
+                referrerPolicy="no-referrer"
+              />
+            </div>
             <div className="absolute inset-0 sunburst opacity-20 animate-rotate-slow" />
             
             <div className="relative z-10 text-center px-4">
@@ -422,7 +432,6 @@ export default function App() {
                   </div>
                   <div className="p-8 flex-1 flex flex-col">
                     <h3 className="font-display text-4xl mb-2 uppercase">{puppy.name}</h3>
-                    <p className="font-bangers text-2xl text-chipaws-blue mb-4 tracking-wider">{puppy.breed}</p>
                     <p className="font-sans text-lg text-slate-600 mb-8 flex-1">{puppy.description}</p>
                     <button 
                       onClick={() => setShowDonationModal(puppy)}
@@ -433,6 +442,62 @@ export default function App() {
                   </div>
                 </motion.div>
               ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {activeTab === 'shelters' && (
+        <section className="py-24 px-6 bg-chipaws-cream">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex flex-col md:flex-row justify-between items-end gap-8 mb-16">
+              <div className="max-w-2xl">
+                <motion.div 
+                  initial={{ opacity: 0, x: -20 }}
+                  whileInView={{ opacity: 1, x: 0 }}
+                  className="inline-flex items-center gap-2 bg-chipaws-blue/10 text-chipaws-blue px-4 py-2 rounded-full font-bangers text-xl tracking-widest mb-6 border-2 border-chipaws-blue/20"
+                >
+                  <MapPin size={20} /> CHICAGO RESCUE NETWORK
+                </motion.div>
+                <h2 className="font-display text-6xl md:text-8xl leading-[0.9] uppercase">
+                  FIND <span className="text-chipaws-blue">SHELTERS</span> & PARKS
+                </h2>
+              </div>
+              <p className="font-sans text-xl text-slate-600 max-w-sm">
+                Explore our interactive map to find adoptable dogs, local shelters, dog parks, and pet stores across the city.
+              </p>
+            </div>
+
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.2 }}
+            >
+              <ShelterMap />
+            </motion.div>
+
+            <div className="grid md:grid-cols-3 gap-8 mt-24">
+              <div className="bg-white border-4 border-black p-8 rounded-[32px] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                <div className="w-16 h-16 bg-chipaws-red/10 rounded-2xl flex items-center justify-center mb-6 border-2 border-black">
+                  <Heart className="text-chipaws-red" size={32} />
+                </div>
+                <h4 className="font-display text-3xl mb-4 uppercase">Direct Donation</h4>
+                <p className="font-sans text-slate-600 mb-6">Many shelters on the map accept direct donations of food, toys, and blankets. Check their pins for details.</p>
+              </div>
+              <div className="bg-white border-4 border-black p-8 rounded-[32px] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                <div className="w-16 h-16 bg-chipaws-blue/10 rounded-2xl flex items-center justify-center mb-6 border-2 border-black">
+                  <Users size={32} />
+                </div>
+                <h4 className="font-display text-3xl mb-4 uppercase">Volunteer</h4>
+                <p className="font-sans text-slate-600 mb-6">Interested in helping out? Use the shelter contact info to inquire about volunteer opportunities near you.</p>
+              </div>
+              <div className="bg-white border-4 border-black p-8 rounded-[32px] shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                <div className="w-16 h-16 bg-chipaws-yellow/10 rounded-2xl flex items-center justify-center mb-6 border-2 border-black">
+                  <Award size={32} />
+                </div>
+                <h4 className="font-display text-3xl mb-4 uppercase">Pet Events</h4>
+                <p className="font-sans text-slate-600 mb-6">Chicago dog parks often host adoption events and meetups. Keep an eye on the green pins!</p>
+              </div>
             </div>
           </div>
         </section>
@@ -484,22 +549,13 @@ export default function App() {
                       className="w-full border-2 border-black p-3 rounded-xl font-sans h-24"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4">
                     <div>
                       <label className="font-bangers text-xl text-chipaws-blue block mb-2">NEIGHBORHOOD</label>
                       <input 
                         type="text"
                         value={profileData.neighborhood}
                         onChange={(e) => setProfileData({...profileData, neighborhood: e.target.value})}
-                        className="w-full border-2 border-black p-3 rounded-xl font-sans"
-                      />
-                    </div>
-                    <div>
-                      <label className="font-bangers text-xl text-chipaws-blue block mb-2">FAV BREED</label>
-                      <input 
-                        type="text"
-                        value={profileData.favoriteBreed}
-                        onChange={(e) => setProfileData({...profileData, favoriteBreed: e.target.value})}
                         className="w-full border-2 border-black p-3 rounded-xl font-sans"
                       />
                     </div>
@@ -574,7 +630,7 @@ export default function App() {
                     <div key={idx} className="flex items-center justify-between bg-white border-2 border-black p-4 rounded-xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]">
                       <div>
                         <p className="font-display text-xl uppercase">{pet.name}</p>
-                        <p className="font-sans text-sm text-slate-500">{pet.breed} • {pet.age}</p>
+                        <p className="font-sans text-sm text-slate-500">{pet.age}</p>
                       </div>
                       <button onClick={() => setMyPets(prev => prev.filter((_, i) => i !== idx))} className="text-red-500 hover:scale-110">
                         <Trash2 size={20} />
@@ -584,19 +640,12 @@ export default function App() {
                 </div>
                 <div className="bg-slate-50 border-2 border-black p-6 rounded-3xl space-y-4">
                   <p className="font-bangers text-xl text-chipaws-blue tracking-widest">ADD A NEW PUP</p>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <input 
                       type="text" 
                       value={newPet.name}
                       onChange={(e) => setNewPet({...newPet, name: e.target.value})}
                       placeholder="Name"
-                      className="border-2 border-black p-3 rounded-xl font-sans"
-                    />
-                    <input 
-                      type="text" 
-                      value={newPet.breed}
-                      onChange={(e) => setNewPet({...newPet, breed: e.target.value})}
-                      placeholder="Breed"
                       className="border-2 border-black p-3 rounded-xl font-sans"
                     />
                     <input 
@@ -609,9 +658,9 @@ export default function App() {
                   </div>
                   <button 
                     onClick={() => {
-                      if (newPet.name && newPet.breed && newPet.age) {
+                      if (newPet.name && newPet.age) {
                         setMyPets(prev => [...prev, newPet]);
-                        setNewPet({ name: "", breed: "", age: "" });
+                        setNewPet({ name: "", age: "" });
                       }
                     }}
                     className="w-full bg-chipaws-yellow border-2 border-black p-4 rounded-xl font-bangers text-2xl hover:scale-[1.02] transition-transform shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] active:translate-x-1 active:translate-y-1 active:shadow-none"

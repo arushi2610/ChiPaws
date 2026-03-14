@@ -3,8 +3,33 @@ import { createServer as createViteServer } from "vite";
 import path from "path";
 import Stripe from "stripe";
 import { v4 as uuidv4 } from "uuid";
+import axios from "axios";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder");
+
+// Petfinder Token Cache
+let petfinderToken: string | null = null;
+let petfinderTokenExpiry: number = 0;
+
+async function getPetfinderToken() {
+  if (petfinderToken && Date.now() < petfinderTokenExpiry) {
+    return petfinderToken;
+  }
+
+  try {
+    const response = await axios.post("https://api.petfinder.com/v2/oauth2/token", {
+      grant_type: "client_credentials",
+      client_id: process.env.PETFINDER_API_KEY,
+      client_secret: process.env.PETFINDER_SECRET,
+    });
+    petfinderToken = response.data.access_token;
+    petfinderTokenExpiry = Date.now() + (response.data.expires_in * 1000) - 60000;
+    return petfinderToken;
+  } catch (err) {
+    console.error("Error getting Petfinder token:", err);
+    return null;
+  }
+}
 
 // In-memory store for demo purposes
 const certificates: Record<string, { id: string; amount: number; date: string; name: string }> = {};
@@ -47,6 +72,48 @@ async function startServer() {
   app.use(express.json());
 
   // API Routes
+  app.get("/api/pets", async (req, res) => {
+    const token = await getPetfinderToken();
+    if (!token) return res.status(500).json({ error: "Could not authenticate with Petfinder" });
+
+    try {
+      const response = await axios.get("https://api.petfinder.com/v2/animals", {
+        headers: { Authorization: `Bearer ${token}` },
+        params: {
+          location: "Chicago, IL",
+          distance: 20,
+          type: "dog",
+          status: "adoptable",
+          limit: 20
+        }
+      });
+      res.json(response.data);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.get("/api/shelters", async (req, res) => {
+    const apiKey = process.env.RESCUEGROUPS_API_KEY;
+    if (!apiKey) return res.status(500).json({ error: "RescueGroups API key missing" });
+
+    try {
+      const response = await axios.post("https://api.rescuegroups.org/v5/public/orgs/search", {
+        data: {
+          filterRadius: {
+            miles: 20,
+            postalcode: "60601"
+          }
+        }
+      }, {
+        headers: { Authorization: apiKey }
+      });
+      res.json(response.data);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post("/api/create-checkout-session", async (req, res) => {
     const { amount } = req.body;
     try {
