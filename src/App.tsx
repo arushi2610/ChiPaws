@@ -42,7 +42,7 @@ import { Dog } from './types';
 
 import ShelterMap from './components/ShelterMap';
 
-const BRAND_BUDDY = "https://images.pexels.com/photos/36568690/pexels-photo-36568690.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2";
+const BRAND_BUDDY = "https://images.pexels.com/photos/36568309/pexels-photo-36568309.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2";
 
 export default function App() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -304,14 +304,6 @@ export default function App() {
         <>
           {/* Hero Section */}
           <section className="relative min-h-screen flex flex-col items-center justify-center pt-20 overflow-hidden">
-            <div className="absolute inset-0 z-0">
-              <img 
-                src={BRAND_BUDDY} 
-                alt="Hero Background" 
-                className="w-full h-full object-cover opacity-10 grayscale"
-                referrerPolicy="no-referrer"
-              />
-            </div>
             <div className="absolute inset-0 sunburst opacity-20 animate-rotate-slow" />
             
             <div className="relative z-10 text-center px-4">
