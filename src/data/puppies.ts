@@ -8,7 +8,7 @@ export const PUPPIES: Dog[] = [
     breed: 'Golden Retriever',
     shelter: 'Chicago North Shelter',
     location: { x: 40, y: 40 },
-    photo: 'https://images.dog.ceo/breeds/retriever-golden/n02099601_5.jpg',
+    photo: 'https://picsum.photos/seed/luna/400/300',
     description: 'Luna is a playful ball of fur who loves belly rubs.'
   },
   {
@@ -18,7 +18,7 @@ export const PUPPIES: Dog[] = [
     breed: 'Beagle',
     shelter: 'South Side Rescue',
     location: { x: 45, y: 45 },
-    photo: 'https://images.dog.ceo/breeds/beagle/n02088364_8871.jpg',
+    photo: 'https://picsum.photos/seed/jerry/400/300',
     description: 'Jerry is a curious pup with a big heart and even bigger ears.'
   },
   {
@@ -28,7 +28,7 @@ export const PUPPIES: Dog[] = [
     breed: 'French Bulldog',
     shelter: 'West Loop Paws',
     location: { x: 50, y: 50 },
-    photo: 'https://images.dog.ceo/breeds/bulldog-french/n02108915_3153.jpg',
+    photo: 'https://picsum.photos/seed/bella/400/300',
     description: 'Bella is small but mighty, and she loves to snuggle.'
   },
   {
@@ -38,7 +38,7 @@ export const PUPPIES: Dog[] = [
     breed: 'German Shepherd',
     shelter: 'Lakeview Shelter',
     location: { x: 55, y: 55 },
-    photo: 'https://images.dog.ceo/breeds/german-shepherd/n02106662_4522.jpg',
+    photo: 'https://picsum.photos/seed/max/400/300',
     description: 'Max is a smart boy who is already learning his basic commands.'
   },
   {
@@ -48,7 +48,7 @@ export const PUPPIES: Dog[] = [
     breed: 'Poodle',
     shelter: 'Lincoln Park Rescue',
     location: { x: 60, y: 60 },
-    photo: 'https://images.dog.ceo/breeds/poodle-standard/n02113799_1121.jpg',
+    photo: 'https://picsum.photos/seed/daisy/400/300',
     description: 'Daisy is as sweet as her name suggests and very gentle.'
   },
   {
@@ -58,7 +58,7 @@ export const PUPPIES: Dog[] = [
     breed: 'Labrador',
     shelter: 'Wicker Park Paws',
     location: { x: 65, y: 65 },
-    photo: 'https://images.dog.ceo/breeds/labrador/n02099712_8014.jpg',
+    photo: 'https://picsum.photos/seed/cooper/400/300',
     description: 'Cooper is a high-energy pup who loves playing fetch.'
   },
   {
@@ -68,7 +68,7 @@ export const PUPPIES: Dog[] = [
     breed: 'Dachshund',
     shelter: 'Logan Square Shelter',
     location: { x: 70, y: 70 },
-    photo: 'https://images.dog.ceo/breeds/dachshund/dachshund-1920_640.jpg',
+    photo: 'https://picsum.photos/seed/milo/400/300',
     description: 'Milo is a tiny adventurer who is always looking for fun.'
   },
   {
@@ -78,7 +78,7 @@ export const PUPPIES: Dog[] = [
     breed: 'Corgi',
     shelter: 'Bucktown Rescue',
     location: { x: 75, y: 75 },
-    photo: 'https://images.dog.ceo/breeds/corgi-cardigan/n02113186_12793.jpg',
+    photo: 'https://picsum.photos/seed/lucy/400/300',
     description: 'Lucy has short legs but a big personality.'
   },
   {
@@ -88,7 +88,7 @@ export const PUPPIES: Dog[] = [
     breed: 'Boxer',
     shelter: 'Hyde Park Paws',
     location: { x: 80, y: 80 },
-    photo: 'https://images.dog.ceo/breeds/boxer/n02108089_11687.jpg',
+    photo: 'https://picsum.photos/seed/charlie/400/300',
     description: 'Charlie is a goofy boy who will keep you laughing all day.'
   },
   {
@@ -98,7 +98,7 @@ export const PUPPIES: Dog[] = [
     breed: 'Shih Tzu',
     shelter: 'Gold Coast Rescue',
     location: { x: 85, y: 85 },
-    photo: 'https://images.dog.ceo/breeds/shihtzu/n02086240_11692.jpg',
+    photo: 'https://picsum.photos/seed/sophie/400/300',
     description: 'Sophie is a elegant little lady who loves to be pampered.'
   }
 ];
