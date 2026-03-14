@@ -1,0 +1,5 @@
+{
+  "name": "ChiPaws",
+  "description": "Discover and adopt rescue dogs in Chicago with an interactive map, donation simulation, and impact tracking.",
+  "requestFramePermissions": ["geolocation"]
+}
