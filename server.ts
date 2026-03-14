@@ -9,6 +9,47 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || "sk_test_placeholder"
 // In-memory store for demo purposes (Hackathon style)
 const certificates: Record<string, { id: string; amount: number; date: string; name: string }> = {};
 
+let petfinderToken: string | null = null;
+let tokenExpiry: number = 0;
+
+async function fetchWithRetry(url: string, options: any, retries = 3, backoff = 1000) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      return response;
+    } catch (err: any) {
+      if (i === retries - 1) throw err;
+      console.warn(`Fetch failed (attempt ${i + 1}), retrying in ${backoff}ms...`, err.message);
+      await new Promise(resolve => setTimeout(resolve, backoff));
+      backoff *= 2;
+    }
+  }
+  throw new Error("Max retries reached");
+}
+
+async function getPetfinderToken() {
+  if (petfinderToken && Date.now() < tokenExpiry) {
+    return petfinderToken;
+  }
+
+  const response = await fetchWithRetry("https://api.petfinder.com/v2/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: `grant_type=client_credentials&client_id=${process.env.PETFINDER_API_KEY}&client_secret=${process.env.PETFINDER_SECRET}`,
+  });
+
+  const data = await response.json() as any;
+  if (data.access_token) {
+    petfinderToken = data.access_token;
+    tokenExpiry = Date.now() + data.expires_in * 1000;
+    return petfinderToken;
+  }
+  throw new Error("Failed to get Petfinder token");
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -79,6 +120,20 @@ async function startServer() {
     const cert = certificates[req.params.id];
     if (!cert) return res.status(404).json({ error: "Certificate not found" });
     res.json(cert);
+  });
+
+  app.get("/api/dogs", async (req, res) => {
+    try {
+      const token = await getPetfinderToken();
+      const response = await fetchWithRetry("https://api.petfinder.com/v2/animals?type=dog&location=Chicago,IL&limit=20", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      console.error("Petfinder API error:", err);
+      res.status(500).json({ error: "Failed to fetch dogs from Petfinder. Please try again later." });
+    }
   });
 
   // Vite middleware for development

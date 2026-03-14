@@ -23,8 +23,76 @@ import {
 } from 'lucide-react';
 import { MapContainer, TileLayer, Marker, Popup, useMap } from 'react-leaflet';
 import L from 'leaflet';
+import { 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  onAuthStateChanged, 
+  signOut,
+  User as FirebaseUser 
+} from 'firebase/auth';
+import { 
+  doc, 
+  setDoc, 
+  getDoc, 
+  serverTimestamp,
+  getDocFromServer
+} from 'firebase/firestore';
+import { auth, db } from './firebase';
 import { Dog, ImpactStats, BadgeType } from './types';
 import { DOGS } from './data/dogs';
+import { PUPPIES } from './data/puppies';
+
+// Error Handling Spec for Firestore Permissions
+enum OperationType {
+  CREATE = 'create',
+  UPDATE = 'update',
+  DELETE = 'delete',
+  LIST = 'list',
+  GET = 'get',
+  WRITE = 'write',
+}
+
+interface FirestoreErrorInfo {
+  error: string;
+  operationType: OperationType;
+  path: string | null;
+  authInfo: {
+    userId: string | undefined;
+    email: string | null | undefined;
+    emailVerified: boolean | undefined;
+    isAnonymous: boolean | undefined;
+    tenantId: string | null | undefined;
+    providerInfo: {
+      providerId: string;
+      displayName: string | null;
+      email: string | null;
+      photoUrl: string | null;
+    }[];
+  }
+}
+
+function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const errInfo: FirestoreErrorInfo = {
+    error: error instanceof Error ? error.message : String(error),
+    authInfo: {
+      userId: auth.currentUser?.uid,
+      email: auth.currentUser?.email,
+      emailVerified: auth.currentUser?.emailVerified,
+      isAnonymous: auth.currentUser?.isAnonymous,
+      tenantId: auth.currentUser?.tenantId,
+      providerInfo: auth.currentUser?.providerData.map(provider => ({
+        providerId: provider.providerId,
+        displayName: provider.displayName,
+        email: provider.email,
+        photoUrl: provider.photoURL
+      })) || []
+    },
+    operationType,
+    path
+  }
+  console.error('Firestore Error: ', JSON.stringify(errInfo));
+  throw new Error(JSON.stringify(errInfo));
+}
 
 // Fix Leaflet icon issue
 const DefaultIcon = L.icon({
@@ -36,8 +104,12 @@ const DefaultIcon = L.icon({
 L.Marker.prototype.options.icon = DefaultIcon;
 
 export default function App() {
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
+  const [activeTab, setActiveTab] = useState<'discover' | 'puppies'>('discover');
   const [selectedDog, setSelectedDog] = useState<Dog | null>(null);
-  const [showDonationModal, setShowDonationModal] = useState(false);
+  const [showDonationModal, setShowDonationModal] = useState<Dog | null>(null); // Track which dog is being donated to
+  const [showSuccessScreen, setShowSuccessScreen] = useState<{ amount: number; dogName: string } | null>(null);
   const [showBadgeModal, setShowBadgeModal] = useState<{ type: BadgeType; dogName?: string; certId?: string } | null>(null);
   const [shelters, setShelters] = useState<any[]>([]);
   const [loadingMap, setLoadingMap] = useState(true);
@@ -46,26 +118,138 @@ export default function App() {
     donationsMade: 15420,
     adoptionRequests: 85
   });
+  const [realDogs, setRealDogs] = useState<Dog[]>(DOGS);
+
+  // Auth Listener
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      setUser(user);
+      setIsAuthReady(true);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Sync user to Firestore
+  useEffect(() => {
+    if (user) {
+      const syncUser = async () => {
+        const userRef = doc(db, 'users', user.uid);
+        try {
+          const userDoc = await getDoc(userRef);
+          if (!userDoc.exists()) {
+            await setDoc(userRef, {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName,
+              photoURL: user.photoURL,
+              role: 'user',
+              createdAt: new Date().toISOString()
+            });
+          }
+        } catch (error) {
+          handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
+        }
+      };
+      syncUser();
+    }
+  }, [user]);
+
+  // Test Connection to Firestore
+  useEffect(() => {
+    async function testConnection() {
+      try {
+        await getDocFromServer(doc(db, 'test', 'connection'));
+      } catch (error) {
+        if(error instanceof Error && error.message.includes('the client is offline')) {
+          console.error("Please check your Firebase configuration. ");
+        }
+      }
+    }
+    testConnection();
+  }, []);
+
+  // Fetch real dog data from Petfinder via our proxy
+  useEffect(() => {
+    const fetchDogs = async () => {
+      try {
+        const response = await fetch('/api/dogs');
+        const data = await response.json();
+        if (data.animals) {
+          const mappedDogs: Dog[] = data.animals.map((animal: any) => ({
+            id: animal.id.toString(),
+            name: animal.name,
+            age: animal.age,
+            breed: animal.breeds.primary,
+            shelter: animal.contact.address.city + ", " + animal.contact.address.state,
+            location: { 
+              x: 30 + Math.random() * 40, // Randomly spread for demo map
+              y: 30 + Math.random() * 40 
+            },
+            photo: animal.photos[0]?.large || `https://picsum.photos/seed/${animal.id}/400/300`,
+            description: animal.description || `Meet ${animal.name}, a lovely ${animal.breeds.primary} looking for a home in Chicago!`
+          }));
+          setRealDogs(mappedDogs);
+        }
+      } catch (error) {
+        console.error("Error fetching dogs:", error);
+        setRealDogs(DOGS); // Fallback to mock data
+      }
+    };
+    fetchDogs();
+  }, []);
 
   // Fetch real shelter data from Overpass API
   useEffect(() => {
-    const fetchShelters = async () => {
-      const query = `
-        [out:json];
-        area["name"="Chicago"]->.searchArea;
+    const fetchShelters = async (retries = 2) => {
+      const query = `[out:json][timeout:15];
+        area["name"="Chicago"]["admin_level"="4"]->.searchArea;
         (
           node["amenity"="animal_shelter"](area.searchArea);
           way["amenity"="animal_shelter"](area.searchArea);
           rel["amenity"="animal_shelter"](area.searchArea);
         );
-        out center;
-      `;
+        out center;`;
+      
       try {
-        const response = await fetch(`https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`);
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s fetch timeout
+
+        const response = await fetch('https://overpass-api.de/api/interpreter', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+          },
+          body: `data=${encodeURIComponent(query)}`,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          if (response.status === 504 && retries > 0) {
+            console.warn("Overpass 504 Timeout, retrying...");
+            return fetchShelters(retries - 1);
+          }
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const contentType = response.headers.get("content-type");
+        if (!contentType || !contentType.includes("application/json")) {
+          const text = await response.text();
+          console.error("Received non-JSON response:", text.substring(0, 200));
+          throw new Error("API returned non-JSON response");
+        }
+
         const data = await response.json();
-        setShelters(data.elements);
-      } catch (error) {
+        if (data && data.elements) {
+          setShelters(data.elements);
+        }
+      } catch (error: any) {
+        if (error.name === 'AbortError' && retries > 0) {
+          console.warn("Overpass fetch aborted, retrying...");
+          return fetchShelters(retries - 1);
+        }
         console.error("Error fetching Overpass data:", error);
+        setShelters([]);
       } finally {
         setLoadingMap(false);
       }
@@ -80,11 +264,25 @@ export default function App() {
   };
 
   const handleStripeDonate = async (amount: number) => {
+    if (!showDonationModal) return;
+    
+    const dogName = showDonationModal.name;
+    
+    // Simulate Stripe checkout and success
+    setShowDonationModal(null);
+    setShowSuccessScreen({ amount, dogName });
+    
+    // In a real app, we'd call the backend:
+    /*
     try {
       const response = await fetch('/api/create-checkout-session', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount })
+        body: JSON.stringify({ 
+          amount,
+          userId: user?.uid,
+          dogId: showDonationModal.id
+        })
       });
       const session = await response.json();
       if (session.url) {
@@ -92,6 +290,24 @@ export default function App() {
       }
     } catch (error) {
       console.error("Stripe error:", error);
+    }
+    */
+  };
+
+  const login = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Login error:", error);
+    }
+  };
+
+  const logout = async () => {
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout error:", error);
     }
   };
 
@@ -128,10 +344,50 @@ export default function App() {
           </div>
           
           <div className="hidden md:flex items-center gap-6 text-sm font-medium text-slate-600">
-            <a href="#map" className="hover:text-chicago-blue transition-colors">Discover</a>
-            <a href="#mission" className="hover:text-chicago-blue transition-colors">Our Mission</a>
             <button 
-              onClick={() => setShowDonationModal(true)}
+              onClick={() => setActiveTab('discover')}
+              className={`${activeTab === 'discover' ? 'text-chicago-blue' : 'hover:text-chicago-blue'} transition-colors`}
+            >
+              Discover
+            </button>
+            <button 
+              onClick={() => setActiveTab('puppies')}
+              className={`${activeTab === 'puppies' ? 'text-chicago-blue' : 'hover:text-chicago-blue'} transition-colors`}
+            >
+              Puppies
+            </button>
+            <a href="#mission" className="hover:text-chicago-blue transition-colors">Our Mission</a>
+            
+            {isAuthReady && (
+              user ? (
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-2">
+                    <img 
+                      src={user.photoURL || `https://ui-avatars.com/api/?name=${user.displayName}`} 
+                      alt={user.displayName || 'User'} 
+                      className="w-8 h-8 rounded-full border border-slate-200"
+                    />
+                    <span className="text-slate-900 font-bold">{user.displayName?.split(' ')[0]}</span>
+                  </div>
+                  <button 
+                    onClick={logout}
+                    className="text-slate-400 hover:text-slate-600 transition-colors"
+                  >
+                    Logout
+                  </button>
+                </div>
+              ) : (
+                <button 
+                  onClick={login}
+                  className="text-slate-600 hover:text-chicago-blue transition-colors font-bold"
+                >
+                  Sign In
+                </button>
+              )
+            )}
+
+            <button 
+              onClick={() => setShowDonationModal(PUPPIES[0])}
               className="bg-chicago-red text-white px-6 py-2 rounded-full hover:bg-red-600 transition-all font-bold shadow-lg shadow-red-100 flex items-center gap-2"
             >
               <Heart size={16} />
@@ -142,8 +398,10 @@ export default function App() {
       </header>
 
       <main className="flex-1">
-        {/* Hero Section */}
-        <section className="bg-white py-20 px-4 overflow-hidden relative">
+        {activeTab === 'discover' ? (
+          <>
+            {/* Hero Section */}
+            <section className="bg-white py-20 px-4 overflow-hidden relative">
           <div className="absolute top-0 right-0 w-1/3 h-full bg-chicago-blue/5 -skew-x-12 translate-x-1/2" />
           <div className="max-w-7xl mx-auto grid md:grid-cols-2 gap-16 items-center relative">
             <motion.div 
@@ -160,7 +418,7 @@ export default function App() {
               </p>
               <div className="flex flex-wrap gap-4">
                 <button 
-                  onClick={() => setShowDonationModal(true)}
+                  onClick={() => setShowDonationModal(PUPPIES[0])}
                   className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-bold text-lg hover:bg-slate-800 transition-all shadow-xl"
                 >
                   Donate via Stripe
@@ -319,8 +577,8 @@ export default function App() {
                   </Marker>
                 ))}
                 
-                {/* Mock Dog Pins for Demo */}
-                {DOGS.map((dog) => (
+                {/* Real Dog Pins from Petfinder */}
+                {realDogs.map((dog) => (
                   <Marker 
                     key={dog.id} 
                     position={[41.8781 + (dog.location.y - 50) * 0.002, -87.6298 + (dog.location.x - 50) * 0.002]}
@@ -350,7 +608,51 @@ export default function App() {
             </div>
           </div>
         </section>
-      </main>
+        </>
+      ) : (
+        <section className="py-24 px-4 bg-slate-50">
+          <div className="max-w-7xl mx-auto">
+            <div className="text-center mb-16">
+              <h2 className="text-5xl font-bold text-slate-900 mb-4">Meet Our Puppies</h2>
+              <p className="text-slate-600 text-lg">These little ones are looking for their forever homes and your support.</p>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
+              {PUPPIES.map((puppy) => (
+                <motion.div 
+                  key={puppy.id}
+                  whileHover={{ y: -10 }}
+                  className="bg-white rounded-[32px] overflow-hidden shadow-xl border border-slate-100 flex flex-col"
+                >
+                  <div className="h-64 relative overflow-hidden">
+                    <img 
+                      src={puppy.photo} 
+                      alt={puppy.name} 
+                      className="w-full h-full object-cover transition-transform duration-500 hover:scale-110"
+                      referrerPolicy="no-referrer"
+                    />
+                    <div className="absolute top-4 left-4 bg-white/90 backdrop-blur px-3 py-1 rounded-full text-xs font-bold text-chicago-blue">
+                      {puppy.age}
+                    </div>
+                  </div>
+                  <div className="p-6 flex-1 flex flex-col">
+                    <h4 className="text-2xl font-bold text-slate-900 mb-1">{puppy.name}</h4>
+                    <p className="text-slate-500 text-sm mb-4">{puppy.breed}</p>
+                    <p className="text-slate-600 text-sm mb-6 line-clamp-2">{puppy.description}</p>
+                    <button 
+                      onClick={() => setShowDonationModal(puppy)}
+                      className="mt-auto w-full bg-chicago-blue text-white font-bold py-3 rounded-2xl hover:bg-sky-500 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Heart size={16} />
+                      Donate to {puppy.name}
+                    </button>
+                  </div>
+                </motion.div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+    </main>
 
       {/* Footer */}
       <footer className="bg-slate-900 text-white py-20 px-4">
@@ -432,7 +734,7 @@ export default function App() {
                       Adopt Me
                     </button>
                     <button 
-                      onClick={() => { setSelectedDog(null); setShowDonationModal(true); }}
+                      onClick={() => { setSelectedDog(null); setShowDonationModal(selectedDog); }}
                       className="px-4 bg-slate-100 text-slate-700 font-bold py-3 rounded-2xl hover:bg-slate-200 transition-all"
                     >
                       Donate
@@ -448,20 +750,92 @@ export default function App() {
       <AnimatePresence>
         {showDonationModal && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDonationModal(false)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowDonationModal(null)} className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" />
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 20 }} className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-8 relative z-10 text-center">
-              <button onClick={() => setShowDonationModal(false)} className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 transition-colors"><X size={20} /></button>
-              <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6"><DollarSign size={32} /></div>
-              <h3 className="text-2xl font-bold text-slate-900 mb-2">Donate via Stripe</h3>
-              <p className="text-slate-500 text-sm mb-8">Choose an amount to help Chicago's rescue dogs.</p>
+              <button onClick={() => setShowDonationModal(null)} className="absolute top-4 right-4 p-2 rounded-full hover:bg-slate-100 transition-colors"><X size={20} /></button>
+              
+              <div className="flex justify-center mb-6">
+                <svg width="80" height="33" viewBox="0 0 80 33" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path d="M79.1 16.5C79.1 25.6 71.7 33 62.6 33C53.5 33 46.1 25.6 46.1 16.5C46.1 7.4 53.5 0 62.6 0C71.7 0 79.1 7.4 79.1 16.5ZM52.6 16.5C52.6 22 57.1 26.5 62.6 26.5C68.1 26.5 72.6 22 72.6 16.5C72.6 11 68.1 6.5 62.6 6.5C57.1 6.5 52.6 11 52.6 16.5Z" fill="#635BFF"/>
+                  <path d="M36.1 16.5C36.1 25.6 28.7 33 19.6 33C10.5 33 3.1 25.6 3.1 16.5C3.1 7.4 10.5 0 19.6 0C28.7 0 36.1 7.4 36.1 16.5ZM9.6 16.5C9.6 22 14.1 26.5 19.6 26.5C25.1 26.5 29.6 22 29.6 16.5C29.6 11 25.1 6.5 19.6 6.5C14.1 6.5 9.6 11 9.6 16.5Z" fill="#635BFF"/>
+                  <path d="M43.1 1.5V31.5H36.1V1.5H43.1Z" fill="#635BFF"/>
+                </svg>
+              </div>
+
+              <h3 className="text-2xl font-bold text-slate-900 mb-2">Donate to {showDonationModal.name}</h3>
+              <p className="text-slate-500 text-sm mb-8">Choose an amount to help {showDonationModal.name} find a forever home.</p>
               <div className="grid grid-cols-3 gap-4 mb-8">
-                {[5, 10, 20].map(amount => (
+                {[5, 10, 25].map(amount => (
                   <button key={amount} onClick={() => handleStripeDonate(amount)} className="border-2 border-slate-100 hover:border-chicago-blue hover:bg-sky-50 py-4 rounded-2xl transition-all group">
                     <span className="block text-2xl font-bold text-slate-900 group-hover:text-chicago-blue">${amount}</span>
                   </button>
                 ))}
               </div>
               <p className="text-xs text-slate-400">Secure Stripe checkout. You'll receive a LinkedIn badge after payment.</p>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showSuccessScreen && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setShowSuccessScreen(null)} className="absolute inset-0 bg-slate-900/80 backdrop-blur-md" />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9 }} 
+              animate={{ opacity: 1, scale: 1 }} 
+              exit={{ opacity: 0, scale: 0.9 }} 
+              className="bg-white w-full max-w-2xl rounded-[40px] shadow-2xl p-12 relative z-10 text-center"
+            >
+              <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-8">
+                <ShieldCheck size={40} />
+              </div>
+              <h3 className="text-4xl font-bold text-slate-900 mb-4">You're officially a ChiPaws supporter!</h3>
+              <p className="text-xl text-slate-600 mb-12">
+                Thank you so much for your generous donation of ${showSuccessScreen.amount} to help {showSuccessScreen.dogName}. Your support directly impacts the lives of Chicago's rescue dogs.
+              </p>
+
+              <div className="bg-slate-50 p-8 rounded-[32px] border-2 border-dashed border-slate-200 mb-12">
+                <div className="flex flex-col md:flex-row items-center gap-8">
+                  <div className="w-32 h-32 bg-chicago-blue/10 text-chicago-blue rounded-full flex items-center justify-center flex-shrink-0">
+                    <Award size={64} />
+                  </div>
+                  <div className="text-left">
+                    <h4 className="text-2xl font-bold text-slate-900 mb-2">Impact Badge: Dog Supporter</h4>
+                    <p className="text-slate-500 mb-4 text-sm">Copy this link to showcase your support on your LinkedIn profile or share it with your network.</p>
+                    <div className="flex items-center gap-2 bg-white p-3 rounded-xl border border-slate-200">
+                      <code className="text-xs text-chicago-blue font-mono truncate flex-1">
+                        {window.location.origin}/impact/{user?.uid || 'guest'}
+                      </code>
+                      <button 
+                        onClick={() => {
+                          navigator.clipboard.writeText(`${window.location.origin}/impact/${user?.uid || 'guest'}`);
+                          alert('Link copied to clipboard!');
+                        }}
+                        className="text-slate-400 hover:text-chicago-blue transition-colors"
+                      >
+                        <Share2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col sm:flex-row gap-4">
+                <button 
+                  onClick={() => window.open('https://linkedin.com', '_blank')}
+                  className="flex-1 bg-[#0077b5] text-white font-bold py-5 rounded-2xl hover:bg-[#006097] transition-all flex items-center justify-center gap-3 text-lg"
+                >
+                  <Users size={24} />
+                  Go to LinkedIn
+                </button>
+                <button 
+                  onClick={() => setShowSuccessScreen(null)}
+                  className="flex-1 bg-slate-100 text-slate-700 font-bold py-5 rounded-2xl hover:bg-slate-200 transition-all text-lg"
+                >
+                  Back to Home
+                </button>
+              </div>
             </motion.div>
           </div>
         )}
