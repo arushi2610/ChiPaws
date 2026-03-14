@@ -18,7 +18,7 @@ export const DOGS: Dog[] = [
     breed: 'Siberian Husky',
     shelter: 'Anti-Cruelty Society (River North)',
     location: { x: 52, y: 48 },
-    photo: 'https://picsum.photos/seed/luna/400/300',
+    photo: 'https://images.dog.ceo/breeds/husky/n02110185_10898.jpg',
     description: 'Luna is a vocal and intelligent girl. She needs an active owner who can keep up with her adventurous spirit.'
   },
   {
@@ -28,7 +28,7 @@ export const DOGS: Dog[] = [
     breed: 'Beagle',
     shelter: 'Chicago Animal Care and Control',
     location: { x: 38, y: 60 },
-    photo: 'https://picsum.photos/seed/charlie/400/300',
+    photo: 'https://images.dog.ceo/breeds/beagle/n02088364_16704.jpg',
     description: 'Charlie is a curious puppy who follows his nose everywhere. He is looking for a patient family to help him grow.'
   },
   {
@@ -38,7 +38,7 @@ export const DOGS: Dog[] = [
     breed: 'Pit Bull Terrier Mix',
     shelter: 'One Tail at a Time (Bucktown)',
     location: { x: 30, y: 40 },
-    photo: 'https://picsum.photos/seed/bella/400/300',
+    photo: 'https://images.dog.ceo/breeds/pitbull/dog-3981540_1280.jpg',
     description: 'Bella is the ultimate couch potato. She loves snuggling and is a master of the "puppy dog eyes".'
   },
   {
@@ -48,7 +48,7 @@ export const DOGS: Dog[] = [
     breed: 'German Shepherd',
     shelter: 'Safe Haven Dog Rescue',
     location: { x: 65, y: 75 },
-    photo: 'https://picsum.photos/seed/max/400/300',
+    photo: 'https://images.dog.ceo/breeds/german-shepherd/n02106662_4522.jpg',
     description: 'Max is a loyal protector and very smart. He excels at obedience training and loves having a job to do.'
   },
   {
@@ -58,7 +58,7 @@ export const DOGS: Dog[] = [
     breed: 'Labrador Mix',
     shelter: 'ALIVE Rescue',
     location: { x: 42, y: 52 },
-    photo: 'https://picsum.photos/seed/daisy/400/300',
+    photo: 'https://images.dog.ceo/breeds/labrador/n02099712_8014.jpg',
     description: 'Daisy is a bundle of joy. She loves water and playing fetch. She is very social and friendly with everyone.'
   }
 ];

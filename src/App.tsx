@@ -185,7 +185,7 @@ export default function App() {
               x: 30 + Math.random() * 40, // Randomly spread for demo map
               y: 30 + Math.random() * 40 
             },
-            photo: animal.photos[0]?.large || `https://picsum.photos/seed/${animal.id}/400/300`,
+            photo: animal.photos[0]?.large || 'https://images.dog.ceo/breeds/retriever-golden/n02099601_5709.jpg',
             description: animal.description || `Meet ${animal.name}, a lovely ${animal.breeds.primary} looking for a home in Chicago!`
           }));
           setRealDogs(mappedDogs);
@@ -435,7 +435,7 @@ export default function App() {
             <div className="relative">
               <div className="aspect-[4/5] bg-slate-100 rounded-[40px] overflow-hidden shadow-2xl relative">
                 <img 
-                  src="https://picsum.photos/seed/chi-dog-1/800/1000" 
+                  src="https://images.dog.ceo/breeds/retriever-golden/n02099601_3073.jpg"
                   alt="Chicago Dog" 
                   className="w-full h-full object-cover"
                   referrerPolicy="no-referrer"
