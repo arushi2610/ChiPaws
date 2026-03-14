@@ -3,12 +3,12 @@ import { Dog } from '../types';
 export const DOGS: Dog[] = [
   {
     id: '1',
-    name: 'Buddy',
+    name: 'Sourdough',
     age: '2 years',
     breed: 'Golden Retriever Mix',
     shelter: 'PAWS Chicago (Lincoln Park)',
     location: { x: 45, y: 35 },
-    photo: 'https://picsum.photos/seed/buddy/400/300',
+    photo: 'https://d3opzdukpbxlns.cloudfront.net/11c52399-becb-46a2-b6cf-c14666c3f432/241ab87ca60d4e5f99d6f1216cd20f77.500.jpg?response-content-disposition=inline%3B%20filename%2A%3DUTF-8%27%271772049407000.jpg&response-content-type=image%2Fjpeg&Expires=1773619200&Signature=W~qzfrdydzGvHS90UW~RTowwWgdf5Oq1x5MOgJBGxaBGbKAWlAXpmIlIb4wnn~uGLno1YxdF7k1kC2l4h26-OBEvB8VqxqQaH2SFeLii~KX3Yq2udw-WPHPiIjVnulrRByHpCurqAT6Hb5JSlql71hNeGq4H7m~hlzBlmw95WYlaiKnyUrtMDQNgtNJ2Ej6LZRLAnnDIxNWLx4UzBam9hlPdT~qbX6cYLeQcGiDpgnPPAfVIa4GD4IRBsQZHv738GyuN9Xp-eGUCID-ePD6D3wZ2HGzcnYo5rRghmi0~QcbhDWQsUn1rVgbY84HjxtSriOicIFnFp18DehHN99z3Qg__&Key-Pair-Id=APKAI33AGAEAYCXFBDTA',
     description: 'Buddy is a high-energy sweetheart who loves long walks by Lake Michigan. He is great with kids and other dogs!'
   },
   {
