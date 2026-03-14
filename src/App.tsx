@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Component } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Twitter, 
@@ -35,7 +35,16 @@ import {
   signOut,
   User as FirebaseUser 
 } from 'firebase/auth';
-import { auth } from './firebase';
+import { 
+  doc, 
+  setDoc, 
+  onSnapshot, 
+  collection, 
+  addDoc, 
+  serverTimestamp,
+  getDoc
+} from 'firebase/firestore';
+import { auth, db, handleFirestoreError, OperationType } from './firebase';
 import { DOGS } from './data/dogs';
 import { PUPPIES } from './data/puppies';
 import { Dog } from './types';
@@ -45,6 +54,14 @@ import ShelterMap from './components/ShelterMap';
 const BRAND_BUDDY = "https://images.pexels.com/photos/36568309/pexels-photo-36568309.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=2";
 
 export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}
+
+function AppContent() {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -108,9 +125,75 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       setUser(user);
       setIsAuthReady(true);
+      
+      if (user) {
+        // Create user document if it doesn't exist
+        const userRef = doc(db, 'users', user.uid);
+        getDoc(userRef).then((docSnap) => {
+          if (!docSnap.exists()) {
+            setDoc(userRef, {
+              uid: user.uid,
+              email: user.email,
+              displayName: user.displayName,
+              photoURL: user.photoURL,
+              role: 'user',
+              createdAt: new Date().toISOString()
+            }).catch(err => handleFirestoreError(err, OperationType.CREATE, `users/${user.uid}`));
+          }
+        });
+      }
     });
     return () => unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setProfileData({
+        bio: "Chicago local & dog lover. Passionate about helping rescue pups find their forever homes!",
+        neighborhood: "Wicker Park",
+        linkedin: "https://linkedin.com",
+        twitter: "https://twitter.com",
+        instagram: "https://instagram.com",
+        photoURL: ""
+      });
+      return;
+    }
+
+    const path = `users/${user.uid}`;
+    const unsubscribe = onSnapshot(doc(db, 'users', user.uid), (doc) => {
+      if (doc.exists()) {
+        const data = doc.data();
+        setProfileData({
+          bio: data.bio || "Chicago local & dog lover. Passionate about helping rescue pups find their forever homes!",
+          neighborhood: data.neighborhood || "Wicker Park",
+          linkedin: data.linkedin || "https://linkedin.com",
+          twitter: data.twitter || "https://twitter.com",
+          instagram: data.instagram || "https://instagram.com",
+          photoURL: data.photoURL || ""
+        });
+      }
+    }, (err) => handleFirestoreError(err, OperationType.GET, path));
+
+    return () => unsubscribe();
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    
+    const path = 'donations';
+    const unsubscribe = onSnapshot(collection(db, 'donations'), (snapshot) => {
+      let total = 0;
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.userId === user.uid && data.status === 'completed') {
+          total += data.amount;
+        }
+      });
+      setTotalDonated(total);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, path));
+
+    return () => unsubscribe();
+  }, [user]);
 
   const login = async () => {
     const provider = new GoogleAuthProvider();
@@ -129,18 +212,45 @@ export default function App() {
     }
   };
 
-  const handleDonate = (amount: number) => {
+  const handleDonate = async (amount: number) => {
     if (!showDonationModal) return;
     const dogName = showDonationModal.name;
     const certId = Math.random().toString(36).substring(2, 15);
-    setTotalDonated(prev => prev + amount);
-    setShowDonationModal(null);
-    setShowSuccessScreen({ amount, dogName, certId });
+    
+    const path = 'donations';
+    try {
+      await addDoc(collection(db, 'donations'), {
+        userId: user?.uid || null,
+        amount,
+        currency: 'USD',
+        status: 'completed', // In real app, this would be 'pending' until Stripe confirms
+        stripeSessionId: `mock_${certId}`,
+        dogName,
+        createdAt: new Date().toISOString()
+      });
+      
+      setShowDonationModal(null);
+      setShowSuccessScreen({ amount, dogName, certId });
+    } catch (err) {
+      handleFirestoreError(err, OperationType.CREATE, path);
+    }
   };
 
-  const handleSaveProfile = () => {
-    setIsEditingProfile(false);
-    // In a real app, we'd save to Firestore here
+  const handleSaveProfile = async () => {
+    if (!user) return;
+    const path = `users/${user.uid}`;
+    try {
+      await setDoc(doc(db, 'users', user.uid), {
+        ...profileData,
+        uid: user.uid,
+        email: user.email,
+        displayName: user.displayName,
+        updatedAt: new Date().toISOString()
+      }, { merge: true });
+      setIsEditingProfile(false);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, path);
+    }
   };
 
   const shareOnTwitter = (certId: string, amount: number) => {
@@ -782,4 +892,44 @@ function ImpactCard({ icon, title, subtitle, description }: { icon: React.ReactN
       <p className="font-sans text-xl text-slate-600 leading-relaxed relative z-10">{description}</p>
     </motion.div>
   );
+}
+
+class ErrorBoundary extends Component<any, any> {
+  state = { hasError: false, error: null };
+
+  static getDerivedStateFromError(error: any) {
+    return { hasError: true, error };
+  }
+
+  render() {
+    // @ts-ignore
+    if (this.state.hasError) {
+      let errorMessage = "Something went wrong.";
+      try {
+        // @ts-ignore
+        const parsed = JSON.parse(this.state.error.message);
+        errorMessage = `Firestore Error: ${parsed.error} during ${parsed.operationType} on ${parsed.path}`;
+      } catch (e) {
+        // @ts-ignore
+        errorMessage = (this.state.error as any).message || String(this.state.error);
+      }
+
+      return (
+        <div className="min-h-screen bg-chipaws-cream flex items-center justify-center p-6 text-center">
+          <div className="bg-white border-8 border-black rounded-[40px] p-12 max-w-2xl shadow-[20px_20px_0px_0px_rgba(0,0,0,1)]">
+            <h2 className="font-display text-5xl mb-6 uppercase">Oops!</h2>
+            <p className="font-sans text-xl text-slate-600 mb-8">{errorMessage}</p>
+            <button 
+              onClick={() => window.location.reload()}
+              className="pill-button bg-chipaws-yellow text-black text-xl"
+            >
+              RELOAD APP
+            </button>
+          </div>
+        </div>
+      );
+    }
+    // @ts-ignore
+    return this.props.children;
+  }
 }
